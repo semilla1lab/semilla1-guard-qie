@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Semilla1 Guard — live on QIE</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#111}
+h1{margin-bottom:.2rem}.sub{color:#555;margin-top:0}
+table{border-collapse:collapse;width:100%;margin:1rem 0}td,th{border:1px solid #ddd;padding:.4rem;font-size:.9rem;text-align:left}
+.ok{color:#0a7a2f;font-weight:600}.no{color:#b00020;font-weight:600}code{font-size:.85rem;word-break:break-all}
+#err{color:#b00020}
+</style></head><body>
+<h1>Semilla1 Guard</h1>
+<p class="sub">On-chain spending policy for AI agents. Every payment attempt is decided by the contract and logged as an event: ALLOW or DENY with a reason. Read-only page, data pulled live from the chain RPC (no backend, no wallet needed).</p>
+<p>Network: <b id="net"></b> · Guard: <code id="g"></code></p>
+<h2>Policy and state</h2><table id="state"><tbody></tbody></table>
+<h2>Decisions (on-chain events)</h2>
+<table id="dec"><thead><tr><th>#</th><th>Block</th><th>Receiver</th><th>Amount (wei)</th><th>Result</th><th>Reason</th><th>Memo</th><th>Tx</th></tr></thead><tbody></tbody></table>
+<p id="err"></p>
+<p class="sub">Change target with <code>?net=mainnet&amp;guard=0x…&amp;from=&lt;block&gt;</code>. Source: Semilla1 Lab.</p>
+<script>
+const NETS={testnet:{name:"QIE testnet (1983)",rpc:["https://rpc2testnet.qie.digital","https://rpc4testnet.qie.digital","https://rpc5testnet.qie.digital"],explorer:"https://testnet.qie.digital"},
+mainnet:{name:"QIE mainnet (1990)",rpc:["https://rpc1mainnet.qie.digital","https://rpc5mainnet.qie.digital"],explorer:"https://mainnet.qie.digital"}};
+const q=new URLSearchParams(location.search);
+const net=NETS[q.get("net")||"mainnet"];
+const GUARD=(q.get("guard")||"0x390Ee8c02076737C632a6BBA069Aaf1f82C29cc4");
+const FROM=parseInt(q.get("from")||(net===NETS.mainnet?"11789900":"9461000"));
+const TOPIC="0xe1bb9f091ec1a33df415fe77f0ed7daf453b0385c3520dd28218cdb961f88b58";
+const REASONS=["OK","PAUSED","NOT_ALLOWED","OVER_TX_CAP","OVER_DAILY_CAP","COOLDOWN","NO_FUNDS","TRANSFER_FAILED"];
+const SEL={owner:"0x8da5cb5b",agent:"0xf5ff5c76",paused:"0x5c975abb",perTxCap:"0xad82cbea",dailyCap:"0xeb339391",cooldown:"0x787a08a6",spentInWindow:"0xdb1f237f",attempts:"0x5754a042",remainingToday:"0xfc3c5515"};
+async function rpc(method,params){for(const u of net.rpc){try{const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const j=await r.json();if(j.result!==undefined)return j.result;if(j.error)throw new Error(j.error.message)}catch(e){var last=e}}throw last||new Error("rpc failed")}
+const big=h=>BigInt(h&&h!=="0x"?h:"0x0");
+const word=(d,i)=>"0x"+d.slice(2+64*i,2+64*(i+1));
+const addr=w=>"0x"+w.slice(-40);
+function str(d,off){const o=Number(big(word(d,off/32)));const len=Number(big("0x"+d.slice(2+o*2,2+o*2+64)));const hex=d.slice(2+o*2+64,2+o*2+64+len*2);return new TextDecoder().decode(new Uint8Array((hex.match(/../g)||[]).map(b=>parseInt(b,16))))}
+function row(t,k,v){const tr=document.createElement("tr");tr.innerHTML="<th>"+k+"</th><td>"+v+"</td>";t.appendChild(tr)}
+(async()=>{
+document.getElementById("net").textContent=net.name;document.getElementById("g").textContent=GUARD;
+try{
+const st=document.querySelector("#state tbody");
+for(const[k,s]of Object.entries(SEL)){const r=await rpc("eth_call",[{to:GUARD,data:s},"latest"]);let v=r;
+ if(k==="owner"||k==="agent")v="<code>"+addr(r)+"</code>";else if(k==="paused")v=big(r)?"yes":"no";else v=big(r).toString()+(k==="cooldown"?" s":k==="attempts"?"":" wei");row(st,k,v)}
+row(st,"balance",big(await rpc("eth_getBalance",[GUARD,"latest"])).toString()+" wei");
+const head=Number(big(await rpc("eth_blockNumber",[])));
+const tb=document.querySelector("#dec tbody");let n=0;
+for(let a=FROM;a<=head;a+=9999){const b=Math.min(a+9998,head);
+ const logs=await rpc("eth_getLogs",[{address:GUARD,fromBlock:"0x"+a.toString(16),toBlock:"0x"+b.toString(16),topics:[TOPIC]}]);
+ for(const l of logs){n++;const amt=big(word(l.data,0)).toString();const ok=big(word(l.data,1))===1n;const reason=REASONS[Number(big(word(l.data,2)))]||"?";const memo=str(l.data,96);
+  const tr=document.createElement("tr");tr.innerHTML=`<td>${big(l.topics[1])}</td><td>${big(l.blockNumber)}</td><td><code>${addr(l.topics[2])}</code></td><td>${amt}</td><td class="${ok?"ok":"no"}">${ok?"ALLOW":"DENY"}</td><td>${reason}</td><td>${memo.replace(/[<>&]/g,"")}</td><td><a href="${net.explorer}/tx/${l.transactionHash}" target="_blank" rel="noopener">${l.transactionHash.slice(0,10)}…</a></td>`;tb.appendChild(tr)}}
+if(!n)document.getElementById("err").textContent="No decisions found in range.";
+}catch(e){document.getElementById("err").textContent="Error: "+e.message}})();
+</script></body></html>
