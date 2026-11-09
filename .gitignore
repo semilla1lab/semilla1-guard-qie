@@ -1,0 +1,6 @@
+cache/
+out/
+broadcast/*/31337/
+.env
+lib/
+broadcast/**/*.recovery.lock
