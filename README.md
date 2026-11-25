@@ -12,7 +12,7 @@ Every attempt, allowed or denied, is emitted as a `Decision` event, so the agent
 
 `Semilla1GuardFactory` lets anyone create their own guard (caller becomes owner) and keeps an on-chain registry (total guards and guards per owner) to measure adoption.
 
-Track: AI + Autonomous Agents. Built by Semilla1 Lab. Port of Semilla1 Guard for NEAR.
+Track: AI + Autonomous Agents. Built by Semilla1 Lab. Solidity implementation written from scratch for QIE during the hackathon window (Oct 30 – Nov 9, 2026). It shares the guard concept with our earlier NEAR project, but no code is reused (different language, contracts and tooling).
 
 ## Build and test
 
